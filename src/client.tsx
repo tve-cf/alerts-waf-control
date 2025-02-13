@@ -4,7 +4,13 @@ import { render } from "hono/jsx/dom";
 import { AppType } from ".";
 import { handleError } from "./common";
 import debounce from "lodash/debounce";
-import { CloudflareResponse, Settings, WAFRule, WAFRuleResponse, Zone } from "./types";
+import {
+  CloudflareResponse,
+  Settings,
+  WAFRule,
+  WAFRuleResponse,
+  Zone,
+} from "./types";
 
 function App() {
   const [apiKey, setApiKey] = useState("");
@@ -74,7 +80,7 @@ function App() {
   useEffect(() => {
     if (zones.length > 0) {
       const savedZoneId = initialZoneRef.current;
-      if (savedZoneId && zones.some(zone => zone.id === savedZoneId)) {
+      if (savedZoneId && zones.some((zone) => zone.id === savedZoneId)) {
         setSelectedZone(savedZoneId);
         initialZoneRef.current = "";
       } else if (!selectedZone) {
