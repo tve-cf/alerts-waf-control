@@ -24,7 +24,7 @@ app.get("/", (c) => {
       <body>
         <div id="root" />
       </body>
-    </html>
+    </html>,
   );
 });
 

@@ -1,6 +1,6 @@
 export function handleError(
   error: string | { message: string } | Error | undefined | null,
-  defaultMessage: string
+  defaultMessage: string,
 ) {
   if (error instanceof Error) {
     return error.message;
