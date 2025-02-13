@@ -1,0 +1,9 @@
+name = "alerts-waf-control"
+main = "dist/index.js"
+compatibility_date = "2025-01-01"
+
+assets = { directory = "./dist/static", binding = "ASSETS", html_handling = "force-trailing-slash", not_found_handling = "404-page" }
+
+[[kv_namespaces]]
+binding = "SETTINGS"
+id = ""
