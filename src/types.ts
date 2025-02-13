@@ -5,6 +5,7 @@ export interface Settings {
   zoneId: string;
   rulesetId: string;
   ruleId: string;
+  secret: string;
 }
 
 export interface Bindings {

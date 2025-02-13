@@ -19,7 +19,7 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
           error: "API key is required",
           result: null,
         },
-        401
+        401,
       );
     }
 
@@ -35,7 +35,7 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
           result: zones.result,
           error: null,
         },
-        200
+        200,
       );
     } catch (error) {
       console.error(error);
@@ -45,7 +45,7 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
           error: "Failed to fetch zones",
           result: null,
         },
-        400
+        400,
       );
     }
   })
@@ -56,7 +56,7 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
     if (!apiKey || !zoneId) {
       return c.json<ApiResponse<null>>(
         { success: false, error: "API key and Zone ID are required" },
-        401
+        401,
       );
     }
 
@@ -67,23 +67,28 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
     try {
       const phaseResponse = await cf.rulesets.phases.get(
         "http_request_firewall_custom",
-        { zone_id: zoneId }
+        { zone_id: zoneId },
       );
 
       if (!phaseResponse.rules || !phaseResponse.rules.length) {
-        return c.json<ApiResponse<null>>({
-          success: false,
-          error: "No WAF rules found",
-          result: null,
-        }, 404);
+        return c.json<ApiResponse<null>>(
+          {
+            success: false,
+            error: "No WAF rules found",
+            result: null,
+          },
+          404,
+        );
       }
 
       const rulesData = phaseResponse.rules;
 
-      return c.json<ApiResponse<{
-        rulesetId: string;
-        rules: typeof phaseResponse.rules;
-      }>>({
+      return c.json<
+        ApiResponse<{
+          rulesetId: string;
+          rules: typeof phaseResponse.rules;
+        }>
+      >({
         success: true,
         result: {
           rulesetId: phaseResponse.id,
@@ -92,11 +97,14 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
         error: null,
       });
     } catch (error) {
-      return c.json<ApiResponse<null>>({
-        success: false,
-        result: null,
-        error: "Failed to fetch WAF rules",
-      }, 500);
+      return c.json<ApiResponse<null>>(
+        {
+          success: false,
+          result: null,
+          error: "Failed to fetch WAF rules",
+        },
+        500,
+      );
     }
   })
   .post("/api/waf/rules/enable", async (c) => {
@@ -107,7 +115,7 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
     if (!apiKey || !zoneId || !ruleId || !rulesetId) {
       return c.json(
         { success: false, error: "Missing required parameters" },
-        400
+        400,
       );
     }
 
@@ -118,7 +126,7 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
     try {
       const phaseResponse = await cf.rulesets.phases.get(
         "http_request_firewall_custom",
-        { zone_id: zoneId }
+        { zone_id: zoneId },
       );
 
       if (!phaseResponse.rules || !phaseResponse.rules.length) {
@@ -151,7 +159,7 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
       console.error(error);
       return c.json(
         { success: false, error: "Failed to update WAF rules" },
-        500
+        500,
       );
     }
   })
@@ -170,12 +178,12 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
   .post("/api/settings", async (c) => {
     try {
       const body = await c.req.json();
-      const { apiKey, zoneId, rulesetId, ruleId } = body as Settings;
+      const { apiKey, zoneId, rulesetId, ruleId, secret } = body as Settings;
 
       if (!apiKey || !zoneId) {
         return c.json<{ success: boolean; error: string; result?: Settings }>(
           { success: false, error: "Missing required parameters" },
-          400
+          400,
         );
       }
 
@@ -191,20 +199,21 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
         if (ruleId && rulesetId) {
           const phaseResponse = await cf.rulesets.phases.get(
             "http_request_firewall_custom",
-            { zone_id: zoneId }
+            { zone_id: zoneId },
           );
 
           if (!phaseResponse.rules?.some((rule) => rule.id === ruleId)) {
-            return c.json<{ success: boolean; error: string; result?: Settings }>(
-              { success: false, error: "Invalid rule ID" },
-              400
-            );
+            return c.json<{
+              success: boolean;
+              error: string;
+              result?: Settings;
+            }>({ success: false, error: "Invalid rule ID" }, 400);
           }
         }
       } catch (error) {
         return c.json<{ success: boolean; error: string; result?: Settings }>(
           { success: false, error: "Invalid API key or zone ID" },
-          400
+          400,
         );
       }
 
@@ -214,9 +223,10 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
         JSON.stringify({
           apiKey,
           zoneId,
+          secret,
           rulesetId: rulesetId || "",
           ruleId: ruleId || "",
-        })
+        }),
       );
 
       return c.json<{ success: boolean; result: Settings }>({
@@ -224,6 +234,7 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
         result: {
           apiKey,
           zoneId,
+          secret,
           rulesetId: rulesetId || "",
           ruleId: ruleId || "",
         },
@@ -232,12 +243,18 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
       console.error(error);
       return c.json<{ success: boolean; error: string; result?: Settings }>(
         { success: false, error: "Failed to save settings" },
-        500
+        500,
       );
     }
   })
   .post("/api/webhook", async (c) => {
     try {
+      const secretHeader = c.req.header("cf-webhook-auth");
+
+      if (!secretHeader) {
+        return c.json({ success: false, error: "Access denied" }, 401);
+      }
+
       // Get settings from KV
       const settingsStr = await c.env.SETTINGS.get("waf-settings");
       if (!settingsStr) {
@@ -245,12 +262,16 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
       }
 
       const settings = JSON.parse(settingsStr) as Settings;
-      const { apiKey, zoneId, rulesetId, ruleId } = settings;
+      const { apiKey, zoneId, rulesetId, ruleId, secret } = settings;
+
+      if (settingsStr !== secret) {
+        return c.json({ success: false, error: "Access denied" }, 401);
+      }
 
       if (!apiKey || !zoneId || !rulesetId || !ruleId) {
         return c.json(
           { success: false, error: "Incomplete settings found" },
-          400
+          400,
         );
       }
 
@@ -262,7 +283,7 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
       // Get current rules to verify the rule exists
       const phaseResponse = await cf.rulesets.phases.get(
         "http_request_firewall_custom",
-        { zone_id: zoneId }
+        { zone_id: zoneId },
       );
 
       if (!phaseResponse.rules || !phaseResponse.rules.length) {
@@ -295,7 +316,7 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
           success: false,
           error: "Failed to process webhook request",
         },
-        500
+        500,
       );
     }
   });

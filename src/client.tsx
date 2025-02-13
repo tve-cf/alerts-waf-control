@@ -46,6 +46,7 @@ interface Settings {
 
 function App() {
   const [apiKey, setApiKey] = useState("");
+  const [secret, setSecret] = useState("");
   const [zones, setZones] = useState<Zone[]>([]);
   const [selectedZone, setSelectedZone] = useState("");
   const [wafRules, setWafRules] = useState<WAFRule[]>([]);
@@ -68,7 +69,7 @@ function App() {
   // Debounced API key setter
   const debouncedSetApiKey = useMemo(
     () => debounce((value: string) => setApiKey(value), 300),
-    []
+    [],
   );
 
   // Load saved settings on mount
@@ -166,7 +167,7 @@ function App() {
           // Only reset selected rule if it doesn't exist in new rules
           if (selectedRule) {
             const ruleExists = data?.result?.rules?.some(
-              (rule) => rule.id === selectedRule
+              (rule) => rule.id === selectedRule,
             );
             if (!ruleExists) {
               setSelectedRule("");
@@ -241,7 +242,7 @@ function App() {
           data.message ||
             `Successfully ${
               !currentRule.enabled ? "enabled" : "disabled"
-            } WAF rule`
+            } WAF rule`,
         );
 
         // Refresh the rules list
@@ -266,7 +267,7 @@ function App() {
   const handleSaveSettings = async () => {
     if (!apiKey || !selectedZone) {
       setError(
-        "Please fill in API key and select a zone before saving settings"
+        "Please fill in API key and select a zone before saving settings",
       );
       return;
     }
@@ -298,6 +299,15 @@ function App() {
     }
   };
 
+  const generateSecret = () => {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    const secret = Array.from(array, (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    setSecret(secret);
+  };
+
   return (
     <div class="container">
       <h1>Cloudflare WAF Control</h1>
@@ -318,6 +328,26 @@ function App() {
               }
               required
             />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label htmlFor="secret">Webhook Secret:</label>
+          <div class="input-with-button">
+            <input
+              type="text"
+              id="secret"
+              value={secret}
+              onChange={(e) => setSecret((e.target as HTMLInputElement).value)}
+              required
+            />
+            <button
+              type="button"
+              onClick={generateSecret}
+              class="generate-button"
+            >
+              Generate
+            </button>
           </div>
         </div>
 
@@ -379,23 +409,25 @@ function App() {
             type="button"
             class="save-button"
             onClick={handleSaveSettings}
-            disabled={loading || !apiKey || !selectedZone}
+            disabled={loading || !apiKey || !secret || !selectedZone}
           >
             {settingsSaved ? "Update Settings" : "Save Settings"}
           </button>
           <button
             type="submit"
-            disabled={loading || !apiKey || !selectedZone || !selectedRule}
+            disabled={
+              loading || !apiKey || !secret || !selectedZone || !selectedRule
+            }
           >
             {loading
               ? "Processing..."
               : selectedRule
-              ? `${
-                  wafRules.find((r) => r.id === selectedRule)?.enabled
-                    ? "Disable"
-                    : "Enable"
-                } WAF Rule`
-              : "Update WAF Rule"}
+                ? `${
+                    wafRules.find((r) => r.id === selectedRule)?.enabled
+                      ? "Disable"
+                      : "Enable"
+                  } WAF Rule`
+                : "Update WAF Rule"}
           </button>
         </div>
       </form>
@@ -415,6 +447,7 @@ function App() {
           font-weight: bold;
         }
         input[type="password"],
+        input[type="text"],
         select {
           width: 100%;
           padding: 8px;
@@ -498,6 +531,15 @@ function App() {
         }
         input[type="password"] {
           flex: 1;
+        }
+        .generate-button {
+          padding: 8px 16px;
+          height: 38px;
+          white-space: nowrap;
+          background-color: #4caf50;
+        }
+        .generate-button:hover:not(:disabled) {
+          background-color: #388e3c;
         }
       `}</style>
     </div>
