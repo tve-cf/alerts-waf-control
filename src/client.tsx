@@ -1,48 +1,10 @@
 import { hc } from "hono/client";
-import { useState, useEffect, useCallback, useMemo } from "hono/jsx";
+import { useState, useEffect, useCallback, useMemo, useRef } from "hono/jsx";
 import { render } from "hono/jsx/dom";
 import { AppType } from ".";
 import { handleError } from "./common";
 import debounce from "lodash/debounce";
-
-interface CloudflareResponse<T> {
-  success: boolean;
-  result: T;
-  error: string | null;
-  errors?: Array<{
-    code: number;
-    message: string;
-  }>;
-  messages?: string[];
-  message?: string;
-}
-
-interface Zone {
-  id: string;
-  name: string;
-}
-
-interface WAFRuleResponse {
-  rulesetId: string;
-  rules: WAFRule[];
-}
-
-interface WAFRule {
-  id?: string;
-  version?: string;
-  action?: string;
-  description?: string;
-  enabled?: boolean;
-  ref?: string;
-  last_updated?: string;
-}
-
-interface Settings {
-  apiKey: string;
-  zoneId: string;
-  rulesetId: string;
-  ruleId: string;
-}
+import { CloudflareResponse, Settings, WAFRule, WAFRuleResponse, Zone } from "./types";
 
 function App() {
   const [apiKey, setApiKey] = useState("");
@@ -56,6 +18,7 @@ function App() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [rulesetId, setRulesetId] = useState<string | null>(null);
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const initialZoneRef = useRef<string>("");
 
   // Memoize the client creation
   const getClient = useCallback(() => {
@@ -87,8 +50,12 @@ function App() {
           const savedSettings = data.result;
           setApiKey(savedSettings.apiKey);
           setRulesetId(savedSettings.rulesetId);
+          setSecret(savedSettings.secret);
           if (savedSettings.ruleId) {
             setSelectedRule(savedSettings.ruleId);
+          }
+          if (savedSettings.zoneId) {
+            initialZoneRef.current = savedSettings.zoneId;
           }
           setSettingsSaved(true);
         }
@@ -102,6 +69,19 @@ function App() {
       mounted = false;
     };
   }, []);
+
+  // Sync zones with initial zone from settings
+  useEffect(() => {
+    if (zones.length > 0) {
+      const savedZoneId = initialZoneRef.current;
+      if (savedZoneId && zones.some(zone => zone.id === savedZoneId)) {
+        setSelectedZone(savedZoneId);
+        initialZoneRef.current = "";
+      } else if (!selectedZone) {
+        setSelectedZone(zones[0].id);
+      }
+    }
+  }, [zones]);
 
   // Fetch zones when API key is provided
   useEffect(() => {
@@ -191,13 +171,7 @@ function App() {
     return () => {
       mounted = false;
     };
-  }, [selectedZone, apiKey, selectedRule, getClient]);
-
-  useEffect(() => {
-    if (zones.length > 0) {
-      setSelectedZone(selectedZone || zones[0].id);
-    }
-  }, [zones, selectedZone, settingsSaved]);
+  }, [selectedZone, apiKey, getClient]);
 
   // Memoize the filtered WAF rules
   const sortedWafRules = useMemo(() => {
@@ -280,6 +254,7 @@ function App() {
       const response = await client.api.settings.$post({
         json: {
           apiKey,
+          secret,
           zoneId: selectedZone,
           rulesetId: rulesetId || "",
           ruleId: selectedRule || "",
