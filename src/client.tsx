@@ -1,8 +1,9 @@
 import { hc } from "hono/client";
-import { useState, useEffect } from "hono/jsx";
+import { useState, useEffect, useCallback, useMemo } from "hono/jsx";
 import { render } from "hono/jsx/dom";
 import { AppType } from ".";
 import { handleError } from "./common";
+import debounce from "lodash/debounce";
 
 interface CloudflareResponse<T> {
   success: boolean;
@@ -55,29 +56,38 @@ function App() {
   const [rulesetId, setRulesetId] = useState<string | null>(null);
   const [settingsSaved, setSettingsSaved] = useState(false);
 
-  // Create a new client instance when API key changes
-  const getClient = () => {
+  // Memoize the client creation
+  const getClient = useCallback(() => {
     return hc<AppType>("/", {
       headers: {
         "X-API-Key": apiKey,
       },
     });
-  };
+  }, [apiKey]);
+
+  // Debounced API key setter
+  const debouncedSetApiKey = useMemo(
+    () => debounce((value: string) => setApiKey(value), 300),
+    []
+  );
 
   // Load saved settings on mount
   useEffect(() => {
+    let mounted = true;
+
     const loadSettings = async () => {
       try {
         const client = getClient();
         const response = await client.api.settings.$get();
         const data =
           (await response.json()) as CloudflareResponse<Settings | null>;
-        if (data.success && data.result) {
-          setApiKey(data.result.apiKey);
-          setSelectedZone(data.result.zoneId);
-          setRulesetId(data.result.rulesetId);
-          if (data.result.ruleId) {
-            setSelectedRule(data.result.ruleId);
+
+        if (mounted && data.success && data.result) {
+          const savedSettings = data.result;
+          setApiKey(savedSettings.apiKey);
+          setRulesetId(savedSettings.rulesetId);
+          if (savedSettings.ruleId) {
+            setSelectedRule(savedSettings.ruleId);
           }
           setSettingsSaved(true);
         }
@@ -85,41 +95,63 @@ function App() {
         console.error("Failed to load settings:", err);
       }
     };
+
     loadSettings();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // Fetch zones when API key is provided
   useEffect(() => {
+    let mounted = true;
+
     const fetchZones = async () => {
       if (!apiKey) return;
+
       setLoading(true);
       setError(null);
       setSuccessMessage(null);
+
       try {
         const client = getClient();
         const response = await client.api.zones.$get();
         const data = await response.json();
-        if (response.status === 200 && data.success) {
-          setZones(data?.result ?? []);
-        } else {
+
+        if (mounted && data.success) {
+          const fetchedZones = data?.result ?? [];
+          setZones(fetchedZones);
+        } else if (mounted) {
           setError(handleError(data.error, "Failed to fetch zones"));
         }
       } catch (err) {
-        setError(handleError(err as Error, "Failed to fetch zones"));
+        if (mounted) {
+          setError(handleError(err as Error, "Failed to fetch zones"));
+        }
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
+
     fetchZones();
-  }, [apiKey]);
+    return () => {
+      mounted = false;
+    };
+  }, [apiKey, getClient]);
 
   // Fetch WAF rules when zone is selected
   useEffect(() => {
+    let mounted = true;
+
     const fetchWAFRules = async () => {
       if (!apiKey || !selectedZone) return;
+
       setLoading(true);
       setError(null);
       setSuccessMessage(null);
+
       try {
         const client = getClient();
         const response = await client.api.waf.rules.$get({
@@ -127,21 +159,51 @@ function App() {
         });
         const data = await response.json();
 
-        if (data.success && data.result) {
+        if (mounted && data.success && data.result) {
           setRulesetId(data?.result?.rulesetId);
           setWafRules(data?.result?.rules!);
-          setSelectedRule(""); // Reset selected rule when zone changes
-        } else {
+
+          // Only reset selected rule if it doesn't exist in new rules
+          if (selectedRule) {
+            const ruleExists = data?.result?.rules?.some(
+              (rule) => rule.id === selectedRule
+            );
+            if (!ruleExists) {
+              setSelectedRule("");
+            }
+          }
+        } else if (mounted) {
           setError(handleError(data.error, "Failed to fetch WAF rules"));
         }
       } catch (err) {
-        setError(handleError(err as Error, "Failed to fetch WAF rules"));
+        if (mounted) {
+          setError(handleError(err as Error, "Failed to fetch WAF rules"));
+        }
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
+
     fetchWAFRules();
-  }, [selectedZone, apiKey]);
+    return () => {
+      mounted = false;
+    };
+  }, [selectedZone, apiKey, selectedRule, getClient]);
+
+  useEffect(() => {
+    if (zones.length > 0) {
+      setSelectedZone(selectedZone || zones[0].id);
+    }
+  }, [zones, selectedZone, settingsSaved]);
+
+  // Memoize the filtered WAF rules
+  const sortedWafRules = useMemo(() => {
+    return [...wafRules].sort((a, b) => {
+      return (a.description || "").localeCompare(b.description || "");
+    });
+  }, [wafRules]);
 
   const handleSubmit = async (e: Event) => {
     e.preventDefault();
@@ -153,7 +215,6 @@ function App() {
     setError(null);
     setSuccessMessage(null);
 
-    // Find the current rule to toggle its state
     const currentRule = wafRules.find((rule) => rule.id === selectedRule);
     if (!currentRule) {
       setError("Selected rule not found");
@@ -168,7 +229,7 @@ function App() {
           rulesetId: rulesetId ?? "",
           zoneId: selectedZone,
           ruleId: selectedRule,
-          enabled: !currentRule.enabled, // Toggle the current state
+          enabled: !currentRule.enabled,
         },
       });
       const data = (await response.json()) as CloudflareResponse<{
@@ -182,6 +243,7 @@ function App() {
               !currentRule.enabled ? "enabled" : "disabled"
             } WAF rule`
         );
+
         // Refresh the rules list
         const rulesResponse = await client.api.waf.rules.$get({
           query: { zoneId: selectedZone },
@@ -211,6 +273,7 @@ function App() {
     setLoading(true);
     setError(null);
     setSuccessMessage(null);
+
     try {
       const client = getClient();
       const response = await client.api.settings.$post({
@@ -250,7 +313,9 @@ function App() {
               type="password"
               id="apiKey"
               value={apiKey}
-              onChange={(e) => setApiKey((e.target as HTMLInputElement).value)}
+              onChange={(e) =>
+                debouncedSetApiKey((e.target as HTMLInputElement).value)
+              }
               required
             />
           </div>
@@ -260,10 +325,11 @@ function App() {
           <label htmlFor="zone">Select Zone:</label>
           <select
             id="zone"
-            value={selectedZone}
-            onChange={(e) =>
-              setSelectedZone((e.target as HTMLSelectElement).value)
-            }
+            value={selectedZone || ""}
+            onChange={(e) => {
+              const value = (e.target as HTMLSelectElement).value;
+              setSelectedZone(value);
+            }}
             disabled={!apiKey || loading}
             required
           >
@@ -279,7 +345,7 @@ function App() {
         <div class="form-group">
           <label>Select WAF Rule:</label>
           <div class="rules-container">
-            {wafRules.map((rule) => (
+            {sortedWafRules.map((rule) => (
               <label key={rule.id} class="rule-item">
                 <input
                   type="radio"
