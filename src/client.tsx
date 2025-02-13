@@ -1,9 +1,8 @@
 import { hc } from "hono/client";
 import { useState, useEffect } from "hono/jsx";
 import { render } from "hono/jsx/dom";
-import type { AppType } from ".";
-
-const client = hc<AppType>("/");
+import { AppType } from ".";
+import { handleError } from "./common";
 
 interface CloudflareResponse<T> {
   success: boolean;
@@ -28,13 +27,13 @@ interface WAFRuleResponse {
 }
 
 interface WAFRule {
-  id: string;
-  version: string;
-  action: string;
-  description: string;
-  enabled: boolean;
-  ref: string;
-  last_updated: string;
+  id?: string;
+  version?: string;
+  action?: string;
+  description?: string;
+  enabled?: boolean;
+  ref?: string;
+  last_updated?: string;
 }
 
 interface Settings {
@@ -99,14 +98,14 @@ function App() {
       try {
         const client = getClient();
         const response = await client.api.zones.$get();
-        const data = (await response.json()) as CloudflareResponse<Zone[]>;
-        if (data.success) {
-          setZones(data.result);
+        const data = await response.json();
+        if (response.status === 200 && data.success) {
+          setZones(data?.result ?? []);
         } else {
-          setError(data.errors?.[0]?.message || "Failed to fetch zones");
+          setError(handleError(data.error, "Failed to fetch zones"));
         }
       } catch (err) {
-        setError("Error fetching zones: " + (err as Error).message);
+        setError(handleError(err as Error, "Failed to fetch zones"));
       } finally {
         setLoading(false);
       }
@@ -126,18 +125,17 @@ function App() {
         const response = await client.api.waf.rules.$get({
           query: { zoneId: selectedZone },
         });
-        const data =
-          (await response.json()) as CloudflareResponse<WAFRuleResponse>;
+        const data = await response.json();
 
-        if (data.success) {
-          setRulesetId(data.result.rulesetId);
-          setWafRules(data.result.rules);
+        if (data.success && data.result) {
+          setRulesetId(data?.result?.rulesetId);
+          setWafRules(data?.result?.rules!);
           setSelectedRule(""); // Reset selected rule when zone changes
         } else {
-          setError(data.error || "Failed to fetch WAF rules");
+          setError(handleError(data.error, "Failed to fetch WAF rules"));
         }
       } catch (err) {
-        setError("Error fetching WAF rules: " + (err as Error).message);
+        setError(handleError(err as Error, "Failed to fetch WAF rules"));
       } finally {
         setLoading(false);
       }
@@ -156,7 +154,7 @@ function App() {
     setSuccessMessage(null);
 
     // Find the current rule to toggle its state
-    const currentRule = wafRules.find(rule => rule.id === selectedRule);
+    const currentRule = wafRules.find((rule) => rule.id === selectedRule);
     if (!currentRule) {
       setError("Selected rule not found");
       setLoading(false);
@@ -170,7 +168,7 @@ function App() {
           rulesetId: rulesetId ?? "",
           zoneId: selectedZone,
           ruleId: selectedRule,
-          enabled: !currentRule.enabled // Toggle the current state
+          enabled: !currentRule.enabled, // Toggle the current state
         },
       });
       const data = (await response.json()) as CloudflareResponse<{
@@ -178,7 +176,12 @@ function App() {
       }>;
 
       if (data.success) {
-        setSuccessMessage(data.message || `Successfully ${!currentRule.enabled ? 'enabled' : 'disabled'} WAF rule`);
+        setSuccessMessage(
+          data.message ||
+            `Successfully ${
+              !currentRule.enabled ? "enabled" : "disabled"
+            } WAF rule`
+        );
         // Refresh the rules list
         const rulesResponse = await client.api.waf.rules.$get({
           query: { zoneId: selectedZone },
@@ -189,10 +192,10 @@ function App() {
           setWafRules(rulesData.result.rules);
         }
       } else {
-        setError(data.error || "Failed to update WAF rule");
+        setError(handleError(data.error, "Failed to update WAF rule"));
       }
     } catch (err) {
-      setError("Error updating WAF rule: " + (err as Error).message);
+      setError(handleError(err as Error, "Failed to update WAF rule"));
     } finally {
       setLoading(false);
     }
@@ -223,10 +226,10 @@ function App() {
         setSuccessMessage("Settings saved successfully");
         setSettingsSaved(true);
       } else {
-        setError(data.error || "Failed to save settings");
+        setError(handleError(data.error, "Failed to save settings"));
       }
     } catch (err) {
-      setError("Error saving settings: " + (err as Error).message);
+      setError(handleError(err as Error, "Failed to save settings"));
     } finally {
       setLoading(false);
     }
@@ -298,6 +301,13 @@ function App() {
             ))}
           </div>
         </div>
+
+        <div class="form-group">
+          <p>Zone ID: {selectedZone}</p>
+          <p>Ruleset ID: {rulesetId}</p>
+          <p>Rule ID: {selectedRule}</p>
+        </div>
+
         <div style={{ display: "flex", gap: "10px" }}>
           <button
             type="button"
@@ -311,9 +321,15 @@ function App() {
             type="submit"
             disabled={loading || !apiKey || !selectedZone || !selectedRule}
           >
-            {loading ? "Processing..." : selectedRule ? 
-              `${wafRules.find(r => r.id === selectedRule)?.enabled ? 'Disable' : 'Enable'} WAF Rule` : 
-              'Update WAF Rule'}
+            {loading
+              ? "Processing..."
+              : selectedRule
+              ? `${
+                  wafRules.find((r) => r.id === selectedRule)?.enabled
+                    ? "Disable"
+                    : "Enable"
+                } WAF Rule`
+              : "Update WAF Rule"}
           </button>
         </div>
       </form>
