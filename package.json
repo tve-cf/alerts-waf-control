@@ -6,8 +6,10 @@
     "build": "vite build --mode client && vite build"
   },
   "dependencies": {
+    "@types/lodash": "^4.17.15",
     "cloudflare": "^4.0.0",
-    "hono": "^4.6.20"
+    "hono": "^4.6.20",
+    "lodash": "^4.17.21"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",
