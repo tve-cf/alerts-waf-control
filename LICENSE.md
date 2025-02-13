@@ -1,4 +1,4 @@
-Copyright [2025] [Amirul Zharfan Bin Zalid]
+Copyright 2025 Amirul Zharfan Bin Zalid
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
