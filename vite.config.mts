@@ -1,14 +1,16 @@
 import devServer from "@hono/vite-dev-server";
 import { defineConfig } from "vite";
-import { getPlatformProxy } from 'wrangler';
-
-const { env, dispose } = await getPlatformProxy({ configPath: './wrangler.toml' })
+import { getPlatformProxy } from "wrangler";
 
 // Change the import to use your runtime specific build
 import build from "@hono/vite-build/cloudflare-workers";
 
-export default defineConfig(async ({ mode }) => {
-  const { env, dispose } = await getPlatformProxy();
+export default defineConfig(async ({ mode, command }) => {
+  const { env, dispose } =
+    command === "serve"
+      ? await getPlatformProxy({ configPath: "./wrangler.toml" })
+      : { env: {}, dispose: () => Promise.resolve() };
+
   if (mode === "client")
     return {
       esbuild: {
