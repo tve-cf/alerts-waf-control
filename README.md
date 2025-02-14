@@ -48,8 +48,6 @@ npm install
 
 2. Create a `wrangler.toml` file based on `wrangler-sample.toml` and configure your Cloudflare Worker settings.
 
-3. Create a `.dev.vars` file for local development environment variables.
-
 ## Development
 
 Run the development server:
