@@ -247,6 +247,9 @@ export const apiRoutes = new Hono<{ Bindings: Bindings }>()
       );
     }
   })
+  .get("/api/webhook", async (c) => {
+    return c.json({ message: "Webhook" });
+  })
   .post("/api/webhook", async (c) => {
     try {
       const secretHeader = c.req.header("cf-webhook-auth");
