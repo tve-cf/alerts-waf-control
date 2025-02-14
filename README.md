@@ -2,6 +2,14 @@
 
 A web application for managing Cloudflare WAF (Web Application Firewall) rules and notifications. This solution provides a user-friendly interface to configure and control WAF rules, along with a webhook endpoint for handling Cloudflare notifications.
 
+## 🚨 Important Notice
+
+This project is intended for demonstration and proof-of-concept purposes only. While it implements basic security measures and functionality, it should be:
+- Used as a reference implementation or learning resource
+- Thoroughly reviewed and enhanced before any production use
+- Modified to meet your specific security requirements and use cases
+- Not considered production-ready without proper security auditing and hardening
+
 ## ⚠️ Security Notice
 
 This application must be protected using Cloudflare Zero Trust Access to ensure secure access to the management interface. Before deploying:
